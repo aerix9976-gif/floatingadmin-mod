@@ -1,0 +1,20 @@
+{
+	"schemaVersion": 1,
+	"id": "floatingadmin",
+	"version": "${version}",
+	"name": "Floating Admin Panel",
+	"description": "A neon custom-GUI admin panel. Press K to open. Needs operator permission on the server.",
+	"authors": ["FloatingAdmin"],
+	"license": "CC0-1.0",
+	"icon": "assets/floatingadmin/icon.png",
+	"environment": "client",
+	"entrypoints": {
+		"client": ["dev.floatingadmin.client.FloatingAdminClient"]
+	},
+	"depends": {
+		"fabricloader": ">=0.20.1",
+		"minecraft": "~26.2",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}
