@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
+import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.tree.CommandNode;
 
 import net.minecraft.commands.CommandSourceStack;
@@ -27,14 +28,15 @@ final class PanelActions {
 	private PanelActions() {}
 
 	/** "Operator" = allowed to use vanilla /gamemode (permission level 2+, or whatever a permission mod grants). */
-	static boolean isOperator(MinecraftServer server, CommandSourceStack source) {
-		CommandNode<CommandSourceStack> node = server.getCommands().getDispatcher().getRoot().getChild("gamemode");
+	static boolean isOperator(CommandDispatcher<CommandSourceStack> dispatcher, CommandSourceStack source) {
+		// Must not touch source.getServer(): it is null while the command tree is sent to a joining client.
+		CommandNode<CommandSourceStack> node = dispatcher.getRoot().getChild("gamemode");
 		return node != null && node.canUse(source);
 	}
 
 	static void handle(MinecraftServer server, ServerPlayer player, String data) {
 		CommandSourceStack source = player.createCommandSourceStack();
-		if (!isOperator(server, source)) {
+		if (!isOperator(server.getCommands().getDispatcher(), source)) {
 			status(player, "You are not an operator.");
 			FloatingAdmin.LOGGER.warn("{} tried to use the admin panel without operator permission", name(player));
 			return;

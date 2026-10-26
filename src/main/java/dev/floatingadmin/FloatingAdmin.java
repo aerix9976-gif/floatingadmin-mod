@@ -41,7 +41,7 @@ public final class FloatingAdmin implements ModInitializer {
 		CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
 			for (String name : new String[] {"adminpanel", "ap", "admin", "fap"}) {
 				dispatcher.register(Commands.literal(name)
-						.requires(src -> PanelActions.isOperator(src.getServer(), src))
+						.requires(src -> PanelActions.isOperator(dispatcher, src))
 						.executes(ctx -> {
 							ServerPlayer player = ctx.getSource().getPlayer();
 							if (player == null) {
