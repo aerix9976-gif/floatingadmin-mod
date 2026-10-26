@@ -143,22 +143,51 @@ final class AdminScreen extends Screen {
 	private void buildPlayers() {
 		String sel = Session.selectedPlayer;
 		if (sel == null) {
-			List<String> names = onlineNames();
+			List<String> all = onlineNames();
+			String q = Session.playerSearch.toLowerCase(Locale.ROOT).trim();
+			List<String> names = new ArrayList<>();
+			for (String n : all) {
+				if (q.isEmpty() || n.toLowerCase(Locale.ROOT).contains(q)) {
+					names.add(n);
+				}
+			}
+			int fieldH = 18;
+			int findW = 40;
+			int clearW = 40;
+			int editW = cw - findW - clearW - 2 * GAP;
+			searchBox = new EditBox(this.font, cx, cy, editW, fieldH, Component.literal("Search players"));
+			searchBox.setMaxLength(16);
+			searchBox.setValue(Session.playerSearch);
+			searchBox.setResponder(v -> Session.playerSearch = v);
+			this.addRenderableWidget(searchBox);
+			add(cx + editW + GAP, cy, findW, fieldH, "Find", 3, false, () -> {
+				Session.playerSearch = searchBox.getValue();
+				Session.playerPage = 0;
+				reopen();
+			}).tooltip("Filter the list by name");
+			add(cx + editW + GAP + findW + GAP, cy, clearW, fieldH, "All", 0, false, () -> {
+				Session.playerSearch = "";
+				Session.playerPage = 0;
+				reopen();
+			}).tooltip("Show every online player");
+
 			int perPage = 12;
 			pagerPages = Math.max(1, (names.size() + perPage - 1) / perPage);
 			Session.playerPage = Math.max(0, Math.min(Session.playerPage, pagerPages - 1));
 			int start = Session.playerPage * perPage;
 			int cols = 3;
 			int rows = 4;
+			int top = cy + fieldH + GAP + 2;
 			int bw = (cw - GAP * (cols - 1)) / cols;
-			int bh = Math.min(26, (ch - GAP * (rows - 1)) / rows);
+			int bh = Math.min(26, (cy + ch - top - GAP * (rows - 1)) / rows);
 			for (int i = 0; i < perPage && start + i < names.size(); i++) {
 				String n = names.get(start + i);
-				add(cx + (i % cols) * (bw + GAP), cy + (i / cols) * (bh + GAP), bw, bh, shorten(n, 13), (i % cols) + 1, false, () -> {
+				add(cx + (i % cols) * (bw + GAP), top + (i / cols) * (bh + GAP), bw, bh, shorten(n, 13), (i % cols) + 1, false, () -> {
 					Session.selectedPlayer = n;
 					reopen();
 				}).tooltip("Open controls for " + n);
 			}
+			Session.status = names.size() + " of " + all.size() + " players shown";
 			addPager(() -> Session.playerPage, v -> Session.playerPage = v);
 			return;
 		}
@@ -223,14 +252,28 @@ final class AdminScreen extends Screen {
 			reopen();
 		}).tooltip("Click to switch between you and the selected player");
 
+		// category chips
+		int chipY = cy + fieldH + GAP;
+		int chipH = 14;
+		int chips = ItemList.CAT_LABELS.length;
+		int chipW = (cw - GAP * (chips - 1)) / chips;
+		for (int i = 0; i < chips; i++) {
+			int cat = i;
+			add(cx + i * (chipW + GAP), chipY, chipW, chipH, ItemList.CAT_LABELS[i], i % 4, false, () -> {
+				Session.itemCat = cat;
+				Session.itemPage = 0;
+				reopen();
+			}).tooltip(ItemList.CAT_NAMES[i]).highlighted(Session.itemCat == i);
+		}
+
 		// grid of items
-		List<ItemList.Entry> items = ItemList.filter(Session.search);
+		List<ItemList.Entry> items = ItemList.filter(Session.search, Session.itemCat);
 		int cols = 8;
 		int rows = 3;
 		int perPage = cols * rows;
 		pagerPages = Math.max(1, (items.size() + perPage - 1) / perPage);
 		Session.itemPage = Math.max(0, Math.min(Session.itemPage, pagerPages - 1));
-		int top = cy + fieldH + GAP + 2;
+		int top = chipY + chipH + GAP;
 		int bw = (cw - GAP * (cols - 1)) / cols;
 		int bh = Math.min(34, (cy + ch - top - GAP * (rows - 1)) / rows);
 		int start = Session.itemPage * perPage;
@@ -241,6 +284,9 @@ final class AdminScreen extends Screen {
 				Net.act("give", who, e.id() + " " + Session.amount);
 			});
 			b.icon(ItemList.stack(e)).tooltip(e.pretty() + "  (" + e.id() + ")");
+		}
+		if (items.isEmpty()) {
+			Session.status = "No items match that search.";
 		}
 		addPager(() -> Session.itemPage, v -> Session.itemPage = v);
 	}
@@ -324,7 +370,7 @@ final class AdminScreen extends Screen {
 
 	@Override
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
-		this.extractBackground(graphics, mouseX, mouseY, delta);
+		// Screen already draws (and blurs) the background before calling us - calling it again crashes.
 		graphics.blitSprite(RenderPipelines.GUI_TEXTURED, PANEL, px, py, pw, ph);
 
 		graphics.text(this.font, Component.literal("FLOATING ADMIN"), px + 16, py + 12, 0xFFB9A6FF, true);

@@ -9,6 +9,8 @@ final class Session {
 	static int playerPage = 0;
 	static String search = "";
 	static int itemPage = 0;
+	static int itemCat = 0;
+	static String playerSearch = "";
 	static int amount = 1;
 	static boolean giveToSelected = false;
 	static String broadcast = "";
