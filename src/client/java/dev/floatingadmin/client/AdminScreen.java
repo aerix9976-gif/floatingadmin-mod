@@ -19,7 +19,7 @@ final class AdminScreen extends Screen {
 	private static final Identifier PANEL = Identifier.fromNamespaceAndPath(FloatingAdminClient.MOD_ID, "panel");
 	private static final int GAP = 4;
 
-	private record Act(String label, int theme, boolean confirm, String tip, String... commands) {}
+	private record Act(String label, int theme, boolean confirm, String tip, String action, String target, String arg) {}
 
 	private int px, py, pw, ph;
 	private int cx, cy, cw, ch;
@@ -89,46 +89,43 @@ final class AdminScreen extends Screen {
 			int col = i % cols;
 			int row = i / cols;
 			FancyButton b = add(cx + col * (bw + GAP), cy + yOffset + row * (bh + GAP), bw, bh, a.label(),
-					a.theme() >= 0 ? a.theme() : (col % 4), a.confirm(), () -> {
-						for (String c : a.commands()) {
-							Cmd.run(c);
-						}
-					});
+					a.theme() >= 0 ? a.theme() : (col % 4), a.confirm(), () -> Net.act(a.action(), a.target(), a.arg()));
 			if (a.tip() != null) {
 				b.tooltip(a.tip());
 			}
 		}
 	}
 
-	private static Act act(String label, String... commands) {
-		return new Act(label, -1, false, null, commands);
+	private static Act act(String label, String action, String target) {
+		return new Act(label, -1, false, null, action, target, "");
 	}
 
-	private static Act danger(String label, String... commands) {
-		return new Act(label, 0, true, "Click twice to confirm", commands);
+	private static Act act(String label, String action, String target, String arg) {
+		return new Act(label, -1, false, null, action, target, arg);
+	}
+
+	private static Act danger(String label, String action, String target) {
+		return new Act(label, 0, true, "Click twice to confirm", action, target, "");
+	}
+
+	private static Act danger(String label, String action, String target, String arg) {
+		return new Act(label, 0, true, "Click twice to confirm", action, target, arg);
 	}
 
 	// ───────────────────────── pages ─────────────────────────
 
 	private void buildHome() {
+		String me = "@s";
 		List<Act> acts = List.of(
-				act("Survival", "gamemode survival @s"),
-				act("Creative", "gamemode creative @s"),
-				act("Adventure", "gamemode adventure @s"),
-				act("Spectator", "gamemode spectator @s"),
-				act("Heal", "effect give @s instant_health 1 10 true"),
-				act("Feed", "effect give @s saturation 1 20 true"),
-				act("God On", "effect give @s resistance infinite 4 true", "effect give @s regeneration infinite 4 true"),
-				act("God Off", "effect clear @s resistance", "effect clear @s regeneration"),
-				act("Vanish On", "effect give @s invisibility infinite 0 true"),
-				act("Vanish Off", "effect clear @s invisibility"),
-				act("Speed", "effect give @s speed infinite 3 true"),
-				act("Night Vis", "effect give @s night_vision infinite 0 true"),
-				act("Jump", "effect give @s jump_boost infinite 4 true"),
-				act("Haste", "effect give @s haste infinite 4 true"),
-				act("Clear FX", "effect clear @s"),
-				act("Set Day", "time set day"));
-		grid(acts, 4, 4, 0);
+				act("Survival", "gm_survival", me), act("Creative", "gm_creative", me), act("Adventure", "gm_adventure", me),
+				act("Spectator", "gm_spectator", me), act("Heal", "heal", me),
+				act("Feed", "feed", me), act("God On", "god_on", me), act("God Off", "god_off", me),
+				act("Vanish On", "vanish_on", me), act("Vanish Off", "vanish_off", me),
+				act("Speed", "effect", me, "speed 3"), act("Night Vis", "effect", me, "night_vision 0"), act("Jump", "effect", me, "jump_boost 4"),
+				act("Haste", "effect", me, "haste 4"), act("Strength", "effect", me, "strength 4"),
+				act("Fire Res", "effect", me, "fire_resistance 0"), act("Water Br", "effect", me, "water_breathing 0"),
+				act("Clear FX", "clear_fx", me), act("+10 Lvls", "levels", me, "10"), act("Launch", "launch", me));
+		grid(acts, 5, 4, 0);
 	}
 
 	private List<String> onlineNames() {
@@ -167,34 +164,22 @@ final class AdminScreen extends Screen {
 		}
 		String p = sel;
 		List<Act> acts = List.of(
-				act("Heal", "effect give " + p + " instant_health 1 10 true"),
-				act("Feed", "effect give " + p + " saturation 1 20 true"),
-				danger("Kill", "kill " + p),
-				act("TP To", "tp @s " + p),
-				act("Bring", "tp " + p + " @s"),
-				act("Survival", "gamemode survival " + p),
-				act("Creative", "gamemode creative " + p),
-				act("Spectator", "gamemode spectator " + p),
-				act("Freeze", "effect give " + p + " slowness infinite 255 true", "effect give " + p + " jump_boost infinite 128 true"),
-				act("Unfreeze", "effect clear " + p + " slowness", "effect clear " + p + " jump_boost"),
-				danger("Clear Inv", "clear " + p),
-				danger("Kick", "kick " + p + " Kicked by staff"),
-				danger("Ban", "ban " + p + " Banned by staff"),
-				act("Pardon", "pardon " + p),
-				danger("Op", "op " + p),
-				danger("Deop", "deop " + p),
-				act("Glow", "effect give " + p + " glowing 60 0 true"),
-				act("Clear FX", "effect clear " + p));
-		// "Give Item" and "Back" need screen actions rather than commands, added below
-		grid(acts, 4, 5, 0);
-		int bw = (cw - GAP * 3) / 4;
+				act("Heal", "heal", p), act("Feed", "feed", p), danger("Kill", "kill", p), act("TP To", "tp_to", p), act("Bring", "bring", p),
+				act("Survival", "gm_survival", p), act("Creative", "gm_creative", p), act("Adventure", "gm_adventure", p),
+				act("Spectator", "gm_spectator", p), act("Spy", "spy", p),
+				act("Freeze", "freeze", p), act("Unfreeze", "unfreeze", p), act("Mute", "mute", p), act("Unmute", "unmute", p),
+				danger("Clear Inv", "clear_inv", p),
+				danger("Kick", "kick", p), danger("Ban", "ban", p), act("Pardon", "pardon", p), danger("Op", "op", p), danger("Deop", "deop", p),
+				act("Smite", "smite", p), act("Clear FX", "clear_fx", p), act("+10 Lvls", "levels", p, "10"));
+		grid(acts, 5, 5, 0);
+		int bw = (cw - GAP * 4) / 5;
 		int bh = Math.min(26, (ch - GAP * 4) / 5);
 		int y = cy + 4 * (bh + GAP);
-		add(cx + 2 * (bw + GAP), y, bw, bh, "Give Item", 2, false, () -> {
+		add(cx + 3 * (bw + GAP), y, bw, bh, "Give Item", 2, false, () -> {
 			Session.giveToSelected = true;
 			switchPage(Session.Page.ITEMS);
 		}).tooltip("Open the item giver targeting " + p);
-		add(cx + 3 * (bw + GAP), y, bw, bh, "Back", 3, false, () -> {
+		add(cx + 4 * (bw + GAP), y, bw, bh, "Back", 3, false, () -> {
 			Session.selectedPlayer = null;
 			Session.giveToSelected = false;
 			reopen();
@@ -253,7 +238,7 @@ final class AdminScreen extends Screen {
 			ItemList.Entry e = items.get(start + i);
 			FancyButton b = add(cx + (i % cols) * (bw + GAP), top + (i / cols) * (bh + GAP), bw, bh, "", i % 4, false, () -> {
 				String who = Session.giveToSelected && Session.selectedPlayer != null ? Session.selectedPlayer : "@s";
-				Cmd.run("give " + who + " " + e.id() + " " + Session.amount);
+				Net.act("give", who, e.id() + " " + Session.amount);
 			});
 			b.icon(ItemList.stack(e)).tooltip(e.pretty() + "  (" + e.id() + ")");
 		}
@@ -262,61 +247,47 @@ final class AdminScreen extends Screen {
 
 	private void buildWorld() {
 		List<Act> acts = List.of(
-				act("Clear", "weather clear"),
-				act("Rain", "weather rain"),
-				act("Thunder", "weather thunder"),
-				act("Day", "time set day"),
-				act("Noon", "time set noon"),
-				act("Night", "time set night"),
-				act("Midnight", "time set midnight"),
-				act("Sunrise", "time set 23000"),
-				act("Peaceful", "difficulty peaceful"),
-				act("Easy", "difficulty easy"),
-				act("Normal", "difficulty normal"),
-				act("Hard", "difficulty hard"),
-				act("Set Spawn", "setworldspawn"),
-				act("Kill Items", "kill @e[type=item]"),
-				act("Kill XP", "kill @e[type=experience_orb]"),
-				act("Save", "save-all"));
-		grid(acts, 4, 4, 0);
+				act("Clear", "weather_clear", ""), act("Rain", "weather_rain", ""), act("Thunder", "weather_thunder", ""),
+				act("Day", "time_day", ""), act("Noon", "time_noon", ""),
+				act("Night", "time_night", ""), act("Midnight", "time_midnight", ""), act("Sunrise", "time_sunrise", ""),
+				act("Peaceful", "diff_peaceful", ""), act("Easy", "diff_easy", ""),
+				act("Normal", "diff_normal", ""), act("Hard", "diff_hard", ""), act("Set Spawn", "set_spawn", ""),
+				act("Kill Items", "kill_items", ""), act("Kill XP", "kill_xp", ""),
+				danger("Kill Mobs", "kill_hostiles", ""), act("Save", "save", ""), act("Tick Stop", "tick_freeze", ""),
+				act("Tick Go", "tick_run", ""), act("Border 2k", "border", "", "2000"));
+		grid(acts, 5, 4, 0);
 	}
 
 	private void buildFun() {
 		int fieldH = 18;
-		int btnW = 56;
-		int editW = cw - 2 * btnW - 2 * GAP;
+		int btnW = 52;
+		int editW = cw - 3 * btnW - 3 * GAP;
 		broadcastBox = new EditBox(this.font, cx, cy, editW, fieldH, Component.literal("Announcement"));
 		broadcastBox.setMaxLength(100);
 		broadcastBox.setValue(Session.broadcast);
 		broadcastBox.setResponder(v -> Session.broadcast = v);
 		this.addRenderableWidget(broadcastBox);
-		add(cx + editW + GAP, cy, btnW, fieldH, "Chat", 2, false, () -> {
-			String m = broadcastBox.getValue().trim();
-			if (!m.isEmpty()) {
-				Cmd.run("tellraw @a [{\"text\":\"[Announcement] \",\"color\":\"aqua\"},{\"text\":\"" + Cmd.json(m) + "\",\"color\":\"white\"}]");
-			}
-		}).tooltip("Send to everyone's chat");
-		add(cx + editW + GAP + btnW + GAP, cy, btnW, fieldH, "Title", 3, false, () -> {
-			String m = broadcastBox.getValue().trim();
-			if (!m.isEmpty()) {
-				Cmd.run("title @a title {\"text\":\"" + Cmd.json(m) + "\",\"color\":\"aqua\"}");
-			}
-		}).tooltip("Show as a big title on everyone's screen");
+		String[] labels = {"Chat", "Title", "Bar"};
+		String[] actions = {"announce", "title", "actionbar"};
+		String[] tips = {"Send to everyone's chat", "Big title on everyone's screen", "Message above everyone's hotbar"};
+		for (int i = 0; i < 3; i++) {
+			String action = actions[i];
+			add(cx + editW + GAP + i * (btnW + GAP), cy, btnW, fieldH, labels[i], i + 1, false, () -> {
+				String m = broadcastBox.getValue().trim();
+				if (!m.isEmpty()) {
+					Net.act(action, "", m);
+				}
+			}).tooltip(tips[i]);
+		}
 
 		List<Act> acts = List.of(
-				act("Lightning", "summon lightning_bolt ~ ~ ~"),
-				act("Cookies All", "give @a cookie 8"),
-				act("Heal All", "effect give @a instant_health 1 10 true"),
-				act("Feed All", "effect give @a saturation 1 20 true"),
-				act("Launch Me", "effect give @s levitation 2 40 true", "effect give @s slow_falling 25 0 true"),
-				act("Rocket", "summon firework_rocket ~ ~1 ~"),
-				act("Random TP", "spreadplayers ~ ~ 10 1000 false @s"),
-				act("Glow All", "effect give @a glowing 120 0 true"),
-				danger("All Creative", "gamemode creative @a"),
-				danger("All Survival", "gamemode survival @a"),
-				danger("Gather All", "tp @a @s"),
-				act("Clear FX All", "effect clear @a"));
-		grid(acts, 4, 3, fieldH + GAP + 2);
+				act("Lightning", "smite", "@s"), act("Cookies", "cookies", "@a"), act("Heal All", "heal", "@a"),
+				act("Feed All", "feed", "@a"), act("Rocket", "rocket", "@s"),
+				act("Random TP", "random_tp", "@s"), act("Glow All", "effect", "@a", "glowing 0 120"),
+				act("No FX All", "clear_fx", "@a"), danger("Gather", "gather", "@s"), danger("All Creat", "gm_creative", "@a"),
+				danger("All Surv", "gm_survival", "@a"), act("List On", "wl_on", ""), act("List Off", "wl_off", ""),
+				act("Summon Pig", "summon", "@s", "pig"), danger("Stop", "stop", ""));
+		grid(acts, 5, 3, fieldH + GAP + 2);
 	}
 
 	// ───────────────────────── helpers ─────────────────────────

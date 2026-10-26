@@ -3,12 +3,13 @@
 	"id": "floatingadmin",
 	"version": "${version}",
 	"name": "Floating Admin Panel",
-	"description": "A neon custom-GUI admin panel. Press K to open. Needs operator permission on the server.",
+	"description": "Operator-only admin panel with a fully custom GUI. Open it with /adminpanel (or /ap, /admin, /fap) or the K key. Install on BOTH the server and the client.",
 	"authors": ["FloatingAdmin"],
 	"license": "CC0-1.0",
 	"icon": "assets/floatingadmin/icon.png",
-	"environment": "client",
+	"environment": "*",
 	"entrypoints": {
+		"main": ["dev.floatingadmin.FloatingAdmin"],
 		"client": ["dev.floatingadmin.client.FloatingAdminClient"]
 	},
 	"depends": {

@@ -1,19 +1,15 @@
-# Floating Admin Panel (Fabric, Minecraft 26.2)
+# Floating Admin Panel - Fabric 26.2 (client + server)
 
-A neon, fully custom-drawn admin screen. Client-side mod: press **K** (rebindable) to open.
-Every button runs a normal server command, so it works on **any** server where you are an operator
-(vanilla, Paper, Fabric ...) - nothing needs to be installed on the server.
+Operator-only admin panel with a fully custom-drawn GUI (not an inventory menu).
 
-Pages: Self (gamemodes, heal, god, vanish, effects), Players (full per-player controls),
-Items (every item, search, 1/16/32/64, give to you or a player), World (weather, time, difficulty, cleanup),
-Fun (announcements, lightning, cookies, random TP ...).
+**Install the same jar on the SERVER and on every CLIENT that should use it**, plus Fabric API for 26.2.
 
-## Build
-Needs JDK 25.
-    ./gradlew build        (Windows: gradlew.bat build)
-Jar: build/libs/FloatingAdminPanel-Fabric-1.0.0.jar  (use the one WITHOUT "-sources")
+Open it: `/adminpanel` (aliases `/ap`, `/admin`, `/fap`) or press K.
+Only operators can open it. The server re-checks operator status on every single click, and it builds the
+commands itself - the client never sends raw command text.
 
-Or push this folder to GitHub: the included workflow builds it and uploads the jar as an artifact.
+Pages: Self, Players (heal, kill, gamemode, spy, freeze, mute, kick, ban, op ...), Items (every item, search, amounts),
+World (weather, time, difficulty, kill mobs/items, tick freeze, border), Fun (announcements, lightning, summon, gather ...).
 
-## Install
-Fabric Loader 0.20.1+ and Fabric API for 26.2, then drop the jar in your client's `mods` folder.
+Build (JDK 25): ./gradlew build  -> build/libs/FloatingAdminPanel-Fabric-<version>.jar (not the -sources one)
+Or push to GitHub: the included workflow builds it.
