@@ -1,1 +1,1 @@
-{"gui": {"scaling": {"type": "nine_slice", "width": 344, "height": 177, "border": 9}}}
+{"gui": {"scaling": {"type": "nine_slice", "width": 336, "height": 148, "border": {"left": 6, "top": 16, "right": 6, "bottom": 6}}}}

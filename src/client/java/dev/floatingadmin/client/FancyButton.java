@@ -75,12 +75,13 @@ final class FancyButton extends AbstractButton {
 		if (!icon.isEmpty()) {
 			graphics.fakeItem(icon, this.getX() + (this.width - 16) / 2, this.getY() + (this.height - 16) / 2);
 		} else if (iconSprite != null) {
-			graphics.blitSprite(RenderPipelines.GUI_TEXTURED, iconSprite, this.getX() + (this.width - 16) / 2,
-					this.getY() + (this.height - 16) / 2, 16, 16);
+			int size = Math.max(8, Math.min(16, Math.min(this.width, this.height) - 2));
+			graphics.blitSprite(RenderPipelines.GUI_TEXTURED, iconSprite, this.getX() + (this.width - size) / 2,
+					this.getY() + (this.height - size) / 2, size, size);
 		} else {
 			boolean asking = confirm && now < confirmUntil;
 			Component text = Component.literal(asking ? "Sure?" : label);
-			int color = asking ? 0xFFFF6B6B : (this.isHovered() ? 0xFFFFFFFF : 0xFFD6D8FF);
+			int color = asking ? 0xFFFF6B6B : (this.isHovered() ? 0xFFFFFFFF : 0xFFD8D9DE);
 			int tw = font.width(text);
 			graphics.text(font, text, this.getX() + (this.width - tw) / 2,
 					this.getY() + (this.height - font.lineHeight) / 2 + 1, color, true);

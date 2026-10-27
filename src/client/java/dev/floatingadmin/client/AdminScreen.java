@@ -41,9 +41,10 @@ final class AdminScreen extends Screen {
 		py = (this.height - ph) / 2;
 		cx = px + 14;
 		cw = pw - 28;
-		cy = py + 58;
-		ch = ph - 58 - 22;
+		cy = py + 46;
+		ch = ph - 46 - 22;
 
+		add(px + pw - 22, py + 2, 14, 13, "", 0, false, this::onClose).sprite("icon_close").tooltip("Close (or press Esc)");
 		buildTabs();
 		switch (Session.page) {
 			case HOME -> buildHome();
@@ -61,7 +62,7 @@ final class AdminScreen extends Screen {
 		int w = (cw - GAP * (pages.length - 1)) / pages.length;
 		for (int i = 0; i < pages.length; i++) {
 			Session.Page p = pages[i];
-			this.addRenderableWidget(new FancyButton(cx + i * (w + GAP), py + 32, w, 20, names[i], i % 4, false,
+			this.addRenderableWidget(new FancyButton(cx + i * (w + GAP), py + 22, w, 20, names[i], i % 4, false,
 					() -> switchPage(p)).sprite(sprites[i]).tooltip(names[i]).highlighted(Session.page == p));
 		}
 	}
@@ -373,17 +374,17 @@ final class AdminScreen extends Screen {
 		// Screen already draws (and blurs) the background before calling us - calling it again crashes.
 		graphics.blitSprite(RenderPipelines.GUI_TEXTURED, PANEL, px, py, pw, ph);
 
-		graphics.text(this.font, Component.literal("FLOATING ADMIN"), px + 16, py + 12, 0xFFB9A6FF, true);
+		graphics.text(this.font, Component.literal("FLOATING ADMIN"), px + 12, py + 4, 0xFFFF4D5E, true);
 		String right = Session.selectedPlayer != null && Session.page == Session.Page.PLAYERS
 				? "Player: " + Session.selectedPlayer
 				: Session.page.name().substring(0, 1) + Session.page.name().substring(1).toLowerCase(Locale.ROOT);
-		graphics.text(this.font, Component.literal(right), px + pw - 16 - this.font.width(right), py + 12, 0xFF7FE9FF, true);
+		graphics.text(this.font, Component.literal(right), px + pw - 30 - this.font.width(right), py + 4, 0xFFC9CBD2, true);
 
 		super.extractRenderState(graphics, mouseX, mouseY, delta);
 
 		boolean paged = (Session.page == Session.Page.ITEMS) || (Session.page == Session.Page.PLAYERS && Session.selectedPlayer == null);
 		int statusMax = pw - 28 - (paged ? 100 : 0);
-		graphics.text(this.font, Component.literal(fit(Session.status, statusMax)), px + 16, py + ph - 17, 0xFF9AA0C8, false);
+		graphics.text(this.font, Component.literal(fit(Session.status, statusMax)), px + 16, py + ph - 17, 0xFF9A9CA6, false);
 		if (paged) {
 			int current = (Session.page == Session.Page.ITEMS ? Session.itemPage : Session.playerPage) + 1;
 			String pageText = current + "/" + pagerPages;
