@@ -1,9 +1,5 @@
 package dev.floatingadmin;
 
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-
 import com.mojang.brigadier.Command;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,11 +18,10 @@ public final class FloatingAdmin implements ModInitializer {
 	public static final String MOD_ID = "floatingadmin";
 	public static final Logger LOGGER = LoggerFactory.getLogger("FloatingAdmin");
 
-	/** Players silenced from the panel. Lives in memory until the server restarts. */
-	static final Set<UUID> MUTED = ConcurrentHashMap.newKeySet();
-
 	@Override
 	public void onInitialize() {
+		Store.load();
+		Stats.register();
 		PayloadTypeRegistry.serverboundPlay().register(ActionPayload.TYPE, ActionPayload.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(PanelPayload.TYPE, PanelPayload.CODEC);
 
@@ -55,13 +50,15 @@ public final class FloatingAdmin implements ModInitializer {
 		});
 
 		ServerMessageEvents.ALLOW_CHAT_MESSAGE.register((message, sender, params) -> {
-			if (MUTED.contains(sender.getUUID())) {
-				sender.sendSystemMessage(Component.literal("You are muted."));
+			long left = Store.muteLeft(sender.getUUID());
+			if (left > 0) {
+				sender.sendSystemMessage(Component.literal(left == Long.MAX_VALUE ? "You are muted."
+						: "You are muted for " + Util.duration(left) + "."));
 				return false;
 			}
 			return true;
 		});
 
-		LOGGER.info("Floating Admin Panel loaded - operators can use /adminpanel");
+		LOGGER.info("Aero's Admin Panel loaded - operators can use /adminpanel");
 	}
 }

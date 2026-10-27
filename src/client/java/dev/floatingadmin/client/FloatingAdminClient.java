@@ -3,10 +3,10 @@ package dev.floatingadmin.client;
 import com.mojang.blaze3d.platform.InputConstants;
 import org.lwjgl.glfw.GLFW;
 
-import dev.floatingadmin.ActionPayload;
 import dev.floatingadmin.PanelPayload;
 
 import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Minecraft;
 import net.minecraft.resources.Identifier;
 
 import net.fabricmc.api.ClientModInitializer;
@@ -27,13 +27,29 @@ public final class FloatingAdminClient implements ClientModInitializer {
 
 	@Override
 	public void onInitializeClient() {
-		// The server tells us when to open the panel (after /adminpanel) and what to show in the footer.
+		// The server tells us when to open the panel (after /adminpanel) and sends the data the pages show.
 		ClientPlayNetworking.registerGlobalReceiver(PanelPayload.TYPE, (payload, context) -> {
 			String[] parts = payload.data().split(SEP, 2);
-			if (parts[0].equals("open")) {
-				context.client().gui.setScreen(new AdminScreen());
-			} else if (parts[0].equals("status") && parts.length > 1) {
-				Session.status = parts[1];
+			String body = parts.length > 1 ? parts[1] : "";
+			switch (parts[0]) {
+				case "open" -> {
+					Net.requestFor(Session.page);
+					context.client().gui.setScreen(new AdminScreen());
+				}
+				case "status" -> Session.status = body;
+				case "stats" -> {
+					Session.stats = body.split("\\|", -1);
+					Session.statsAt = System.currentTimeMillis();
+				}
+				case "log" -> Session.log = Session.lines(body);
+				case "bans" -> Session.bans = Session.lines(body);
+				case "mutes" -> Session.mutes = Session.lines(body);
+				case "warps" -> Session.warps = Session.lines(body);
+				default -> { }
+			}
+			if (!parts[0].equals("open") && !parts[0].equals("stats") && !parts[0].equals("status")
+					&& Minecraft.getInstance().gui.screen() instanceof AdminScreen screen) {
+				screen.dataArrived();
 			}
 		});
 
@@ -41,11 +57,11 @@ public final class FloatingAdminClient implements ClientModInitializer {
 			if (client.player == null || !OPEN.consumeClick()) {
 				return;
 			}
-			if (ClientPlayNetworking.canSend(ActionPayload.TYPE)) {
+			if (Net.available()) {
 				// the server verifies operator status and answers with "open"
-				ClientPlayNetworking.send(new ActionPayload("open" + SEP + SEP));
+				Net.request("open");
 			} else {
-				Session.status = "This server doesn't have Floating Admin installed.";
+				Session.status = "This server doesn't have Aero's Admin Panel installed.";
 				client.gui.setScreen(new AdminScreen());
 			}
 		});

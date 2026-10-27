@@ -1,18 +1,27 @@
 package dev.floatingadmin;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Pattern;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.tree.CommandNode;
 
 import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.fabricmc.loader.api.FabricLoader;
 
 /**
  * Server-side brain. The client only sends an action id; the server checks that the sender is an
@@ -24,6 +33,9 @@ final class PanelActions {
 	private static final Pattern NAME = Pattern.compile("^[A-Za-z0-9_]{1,16}$");
 	private static final Pattern ID = Pattern.compile("^[a-z0-9_.-]+(:[a-z0-9_./-]+)?$");
 	private static final Pattern WORD = Pattern.compile("^[a-z_]{3,40}$");
+	private static final Pattern WARP = Pattern.compile("^[A-Za-z0-9_-]{1,20}$");
+	private static final Pattern COORD = Pattern.compile("^(~|~?-?\\d{1,8}(\\.\\d{1,3})?)$");
+	private static final Set<String> COLORS = Set.of("white", "aqua", "red", "gold", "green", "yellow", "light_purple", "gray", "dark_red", "blue");
 
 	private PanelActions() {}
 
@@ -46,29 +58,24 @@ final class PanelActions {
 		String target = parts.length > 1 ? parts[1] : "";
 		String arg = parts.length > 2 ? parts[2] : "";
 
-		if (action.equals("open")) {
-			ServerPlayNetworking.send(player, new PanelPayload("open"));
-			return;
+		// ---- requests: no side effects, just data for the pages ----
+		switch (action) {
+			case "open" -> { ServerPlayNetworking.send(player, new PanelPayload("open")); return; }
+			case "req_stats" -> { send(player, "stats", Stats.snapshot(server)); return; }
+			case "req_log" -> { send(player, "log", String.join("\n", Store.recentLog(60))); return; }
+			case "req_mutes" -> { send(player, "mutes", String.join("\n", Store.muteLines())); return; }
+			case "req_bans" -> { send(player, "bans", String.join("\n", banLines())); return; }
+			case "req_warps" -> { send(player, "warps", String.join("\n", Store.warpLines())); return; }
+			default -> { }
 		}
+
 		if (!validTarget(target)) {
 			status(player, "Invalid target.");
 			return;
 		}
 
-		// custom server-side features (not vanilla commands)
-		if (action.equals("mute") || action.equals("unmute")) {
-			ServerPlayer victim = find(server, target);
-			if (victim == null) {
-				status(player, target + " is not online.");
-				return;
-			}
-			if (action.equals("mute")) {
-				FloatingAdmin.MUTED.add(victim.getUUID());
-			} else {
-				FloatingAdmin.MUTED.remove(victim.getUUID());
-			}
-			FloatingAdmin.LOGGER.info("{} -> {} {}", name(player), action, target);
-			status(player, (action.equals("mute") ? "Muted " : "Unmuted ") + name(victim));
+		// ---- custom features that are not plain vanilla commands ----
+		if (handleSpecial(server, player, action, target, arg)) {
 			return;
 		}
 
@@ -77,11 +84,114 @@ final class PanelActions {
 			status(player, "Unknown or invalid action: " + action);
 			return;
 		}
-		FloatingAdmin.LOGGER.info("{} -> {} [{}] {}", name(player), action, target, arg);
+		logAction(player, action, target, arg);
 		for (String command : commands) {
 			server.getCommands().performPrefixedCommand(source, command);
 		}
 		status(player, "Done: " + action.replace('_', ' ') + (target.isEmpty() ? "" : " (" + target + ")"));
+		if (action.equals("pardon")) {
+			send(player, "bans", String.join("\n", banLines()));
+		}
+	}
+
+	/** Returns true when the action was fully handled here. */
+	private static boolean handleSpecial(MinecraftServer server, ServerPlayer player, String action, String target, String arg) {
+		switch (action) {
+			case "mute": {
+				ServerPlayer victim = find(server, target);
+				if (victim == null) {
+					status(player, target + " is not online.");
+					return true;
+				}
+				int minutes = clamp(arg, 0, 525600, 0);
+				long until = minutes > 0 ? System.currentTimeMillis() + minutes * 60_000L : 0;
+				Store.mute(victim.getUUID(), name(victim), until);
+				logAction(player, "mute", target, minutes > 0 ? minutes + " min" : "permanent");
+				status(player, "Muted " + name(victim) + (minutes > 0 ? " for " + minutes + " min" : " (permanent)"));
+				send(player, "mutes", String.join("\n", Store.muteLines()));
+				return true;
+			}
+			case "unmute": {
+				boolean removed = NAME.matcher(target).matches() && Store.unmuteName(target);
+				logAction(player, "unmute", target, "");
+				status(player, removed ? "Unmuted " + target : target + " was not muted.");
+				send(player, "mutes", String.join("\n", Store.muteLines()));
+				return true;
+			}
+			case "warp_set": {
+				if (!WARP.matcher(arg).matches()) {
+					status(player, "Warp names: letters, numbers, - and _ (max 20).");
+					return true;
+				}
+				Store.setWarp(arg, new Store.Warp(player.level().dimension().identifier().toString(), player.getX(), player.getY(),
+						player.getZ(), player.getYRot(), player.getXRot()));
+				logAction(player, "warp set", "", arg);
+				status(player, "Saved warp '" + arg + "' at your position.");
+				send(player, "warps", String.join("\n", Store.warpLines()));
+				return true;
+			}
+			case "warp_go": {
+				Store.Warp w = WARP.matcher(arg).matches() ? Store.warp(arg) : null;
+				if (w == null || !ID.matcher(w.dim()).matches()) {
+					status(player, "No warp called '" + arg + "'.");
+					return true;
+				}
+				String cmd = String.format(Locale.ROOT, "execute in %s run tp @s %.2f %.2f %.2f %.1f %.1f", w.dim(), w.x(), w.y(), w.z(), w.yaw(), w.pitch());
+				server.getCommands().performPrefixedCommand(player.createCommandSourceStack(), cmd);
+				logAction(player, "warp go", "", arg);
+				status(player, "Teleported to warp '" + arg + "'.");
+				return true;
+			}
+			case "warp_del": {
+				boolean removed = WARP.matcher(arg).matches() && Store.deleteWarp(arg);
+				logAction(player, "warp delete", "", arg);
+				status(player, removed ? "Deleted warp '" + arg + "'." : "No warp called '" + arg + "'.");
+				send(player, "warps", String.join("\n", Store.warpLines()));
+				return true;
+			}
+			case "tp_xyz": {
+				String[] c = arg.trim().split(" ");
+				if (c.length != 3 || !COORD.matcher(c[0]).matches() || !COORD.matcher(c[1]).matches() || !COORD.matcher(c[2]).matches()) {
+					status(player, "Enter three numbers (or ~) for X Y Z.");
+					return true;
+				}
+				server.getCommands().performPrefixedCommand(player.createCommandSourceStack(), "tp @s " + c[0] + " " + c[1] + " " + c[2]);
+				logAction(player, "tp xyz", "", arg);
+				status(player, "Teleported to " + arg);
+				return true;
+			}
+			case "announce":
+			case "title":
+			case "actionbar":
+			case "announce_both": {
+				String[] ca = arg.split(" ", 2);
+				String color = COLORS.contains(ca[0]) ? ca[0] : "white";
+				String text = COLORS.contains(ca[0]) ? (ca.length > 1 ? ca[1] : "") : arg;
+				if (text.isBlank()) {
+					status(player, "Type a message first.");
+					return true;
+				}
+				String msg = json(text);
+				List<String> cmds = new ArrayList<>();
+				if (action.equals("announce") || action.equals("announce_both")) {
+					cmds.add("tellraw @a [{\"text\":\"[Announcement] \",\"color\":\"" + color + "\",\"bold\":true},{\"text\":\"" + msg + "\",\"color\":\"white\"}]");
+				}
+				if (action.equals("title") || action.equals("announce_both")) {
+					cmds.add("title @a title {\"text\":\"" + msg + "\",\"color\":\"" + color + "\"}");
+				}
+				if (action.equals("actionbar")) {
+					cmds.add("title @a actionbar {\"text\":\"" + msg + "\",\"color\":\"" + color + "\"}");
+				}
+				for (String cmd : cmds) {
+					server.getCommands().performPrefixedCommand(player.createCommandSourceStack(), cmd);
+				}
+				logAction(player, action, "@a", text);
+				status(player, "Announcement sent.");
+				return true;
+			}
+			default:
+				return false;
+		}
 	}
 
 	// ───────────────────────── action table ─────────────────────────
@@ -109,6 +219,7 @@ final class PanelActions {
 			case "launch": return List.of("effect give " + t + " levitation 2 40 true", "effect give " + t + " slow_falling 25 0 true");
 			case "levels": return List.of("xp add " + t + " " + clamp(arg, -100000, 100000, 10) + " levels");
 			case "effect": return effect(t, arg);
+			case "effect_clear_one": return WORD.matcher(arg).matches() ? List.of("effect clear " + t + " " + arg) : null;
 			case "give": return give(t, arg);
 			case "enchant": return enchant(t, arg);
 			// ---- named-player only ----
@@ -148,17 +259,31 @@ final class PanelActions {
 			case "wl_on": return List.of("whitelist on");
 			case "wl_off": return List.of("whitelist off");
 			case "stop": return List.of("stop");
+			case "rule": return rule(arg);
+			// ---- teleport presets ----
+			case "tp_top": return List.of("execute positioned over world_surface run tp @s ~ ~ ~");
+			case "tp_overworld": return List.of("execute in minecraft:overworld positioned over world_surface run tp @s ~ ~ ~");
+			case "tp_nether": return List.of("execute in minecraft:the_nether run tp @s ~ 80 ~");
+			case "tp_end": return List.of("execute in minecraft:the_end run tp @s 100 49 0");
 			// ---- fun ----
 			case "cookies": return List.of("give " + t + " cookie 8");
 			case "rocket": return List.of("execute at " + t + " run summon firework_rocket ~ ~1 ~");
 			case "random_tp": return List.of("spreadplayers ~ ~ 10 1000 false " + t);
 			case "gather": return List.of("tp @a @s");
 			case "summon": return ID.matcher(arg).matches() ? List.of("execute at " + t + " run summon " + arg + " ~ ~ ~") : null;
-			case "announce": return arg.isBlank() ? null : List.of("tellraw @a [{\"text\":\"[Announcement] \",\"color\":\"aqua\"},{\"text\":\"" + json(arg) + "\",\"color\":\"white\"}]");
-			case "title": return arg.isBlank() ? null : List.of("title @a title {\"text\":\"" + json(arg) + "\",\"color\":\"aqua\"}");
-			case "actionbar": return arg.isBlank() ? null : List.of("title @a actionbar {\"text\":\"" + json(arg) + "\",\"color\":\"aqua\"}");
+			case "clear_title": return List.of("title @a clear");
+			case "clear_chat": return List.of("tellraw @a {\"text\":\"" + "\\n".repeat(100) + "\"}");
+			case "ping": return List.of("execute as @a at @s run playsound minecraft:block.note_block.pling master @s ~ ~ ~ 1 1");
 			default: return null;
 		}
+	}
+
+	private static List<String> rule(String arg) {
+		String[] a = arg.trim().split(" ");
+		if (a.length != 2 || !WORD.matcher(a[0]).matches() || !(a[1].equals("true") || a[1].equals("false"))) {
+			return null;
+		}
+		return List.of("gamerule " + a[0] + " " + a[1]);
 	}
 
 	private static List<String> effect(String t, String arg) {
@@ -187,6 +312,32 @@ final class PanelActions {
 		}
 		int level = a.length > 1 ? clamp(a[1], 1, 255, 1) : 1;
 		return List.of("enchant " + t + " " + a[0] + " " + level);
+	}
+
+	// ───────────────────────── ban list ─────────────────────────
+
+	/** "name TAB reason" lines from the server's own banned-players.json. */
+	private static List<String> banLines() {
+		List<String> out = new ArrayList<>();
+		Path file = FabricLoader.getInstance().getGameDir().resolve("banned-players.json");
+		try {
+			if (!Files.exists(file)) {
+				return out;
+			}
+			JsonArray arr = JsonParser.parseString(Files.readString(file, StandardCharsets.UTF_8)).getAsJsonArray();
+			for (JsonElement el : arr) {
+				JsonObject o = el.getAsJsonObject();
+				String n = o.has("name") ? o.get("name").getAsString() : "?";
+				String reason = o.has("reason") ? o.get("reason").getAsString() : "";
+				out.add(n + "\t" + reason.replace('\n', ' ').replace('\t', ' '));
+				if (out.size() >= 80) {
+					break;
+				}
+			}
+		} catch (Exception e) {
+			FloatingAdmin.LOGGER.warn("Could not read banned-players.json: {}", e.getMessage());
+		}
+		return out;
 	}
 
 	// ───────────────────────── helpers ─────────────────────────
@@ -238,7 +389,17 @@ final class PanelActions {
 		return p.getName().getString();
 	}
 
+	private static void logAction(ServerPlayer player, String action, String target, String arg) {
+		String detail = arg.length() > 60 ? arg.substring(0, 60) + "..." : arg;
+		Store.log(name(player), action.replace('_', ' ') + (target.isEmpty() ? "" : " -> " + target) + (detail.isEmpty() ? "" : " (" + detail + ")"));
+		FloatingAdmin.LOGGER.info("{} -> {} [{}] {}", name(player), action, target, detail);
+	}
+
+	private static void send(ServerPlayer player, String kind, String body) {
+		ServerPlayNetworking.send(player, new PanelPayload(kind + SEP + body));
+	}
+
 	private static void status(ServerPlayer player, String text) {
-		ServerPlayNetworking.send(player, new PanelPayload("status" + SEP + text));
+		send(player, "status", text);
 	}
 }

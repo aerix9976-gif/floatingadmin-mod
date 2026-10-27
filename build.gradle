@@ -55,7 +55,7 @@ java {
 }
 
 base {
-	archivesName = "FloatingAdminPanel-Fabric"
+	archivesName = "AerosAdminPanel"
 }
 
 jar {
