@@ -41,7 +41,7 @@ final class Stats {
 		StringBuilder worlds = new StringBuilder();
 		for (ServerLevel level : server.getAllLevels()) {
 			int count = 0;
-			for (Entity e : level.getAllEntities()) {
+			for (Entity ignored : level.getAllEntities()) {
 				count++;
 			}
 			total += count;

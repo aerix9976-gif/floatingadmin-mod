@@ -463,8 +463,22 @@ final class PanelActions {
 		}
 		String what = BuiltInRegistries.ITEM.getKey(stack.getItem()) + " x" + stack.getCount();
 		if (a[2].equals("copy") || a[2].equals("take")) {
-			if (!admin.getInventory().add(stack.copy())) {
+			// Inventory.add shrinks the stack it is given by whatever it managed to place.
+			ItemStack giving = stack.copy();
+			int before = giving.getCount();
+			admin.getInventory().add(giving);
+			int moved = before - giving.getCount();
+			if (moved <= 0) {
 				status(admin, "Your inventory is full.");
+				return true;
+			}
+			if (giving.getCount() > 0) {
+				// Only part of it fit: for "take", leave the rest with the owner instead of deleting it.
+				if (a[2].equals("take")) {
+					stack.shrink(moved);
+				}
+				status(admin, "Your inventory only had room for " + moved + " of " + before + ".");
+				send(admin, "inv", invBody(who, a[0]));
 				return true;
 			}
 		}
@@ -571,7 +585,7 @@ final class PanelActions {
 			}
 		}
 		logAction(admin, "kit give", target.isEmpty() ? "@s" : target, name);
-		status(admin, "Gave kit '" + name + "'" + (full > 0 ? " (" + full + " items did not fit)" : "."));
+		status(admin, "Gave kit '" + name + "'" + (full > 0 ? " (" + full + " items did not fit and were dropped at their feet)" : "."));
 		return true;
 	}
 

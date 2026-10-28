@@ -14,4 +14,5 @@ Inventory Viewer (copy/take/delete), Kits, World, Announce, Fun, Teleport & Warp
 
 Data is stored in `config/aeros-admin/` (mutes.json, warps.json, kits.json, actions.log).
 
-Build (JDK 25): ./gradlew build  -> build/libs/AerosAdminPanel-<version>.jar (not the -sources one)
+Build (JDK 25): ./gradlew remapJar  -> build/libs/AerosAdminPanel-<version>.jar
+(The first build downloads and remaps Minecraft and takes several minutes; later builds reuse the cache and take seconds.)

@@ -19,10 +19,12 @@ jobs:
         with:
           java-version: '25'
           distribution: 'microsoft'
+      - name: setup gradle (caches Minecraft + Loom between runs)
+        uses: gradle/actions/setup-gradle@v5
       - name: make gradle wrapper executable
         run: chmod +x ./gradlew
       - name: build
-        run: ./gradlew build
+        run: ./gradlew build --build-cache
       - name: capture build artifacts
         uses: actions/upload-artifact@v7
         with:
