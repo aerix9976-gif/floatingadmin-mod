@@ -33,6 +33,7 @@ final class Store {
 	private static final Map<UUID, Mute> MUTES = new LinkedHashMap<>();
 	private static final Map<String, Warp> WARPS = new LinkedHashMap<>();
 	private static final Deque<String> LOG = new ArrayDeque<>();
+	private static final Map<String, List<String>> KITS = new LinkedHashMap<>();
 
 	private Store() {}
 
@@ -61,6 +62,18 @@ final class Store {
 						o.get("z").getAsDouble(), o.get("yaw").getAsFloat(), o.get("pitch").getAsFloat()));
 			} catch (RuntimeException ignored) {
 				// skip a corrupt entry
+			}
+		}
+		JsonObject kits = read("kits.json");
+		for (Map.Entry<String, JsonElement> e : kits.entrySet()) {
+			try {
+				List<String> items = new ArrayList<>();
+				for (JsonElement item : e.getValue().getAsJsonArray()) {
+					items.add(item.getAsString());
+				}
+				KITS.put(e.getKey(), items);
+			} catch (RuntimeException ignored) {
+				// skip a corrupt kit
 			}
 		}
 		Path log = DIR.resolve("actions.log");
@@ -203,6 +216,47 @@ final class Store {
 			root.add(e.getKey(), o);
 		}
 		write("warps.json", root);
+	}
+
+	// ───────────────────────── kits ─────────────────────────
+	// A kit is a list of items, each stored as the JSON text of a full item stack (keeps enchantments and components).
+
+	static synchronized void setKit(String name, List<String> items) {
+		KITS.put(name, new ArrayList<>(items));
+		saveKits();
+	}
+
+	static synchronized boolean deleteKit(String name) {
+		boolean removed = KITS.remove(name) != null;
+		if (removed) {
+			saveKits();
+		}
+		return removed;
+	}
+
+	static synchronized List<String> kit(String name) {
+		List<String> k = KITS.get(name);
+		return k == null ? null : new ArrayList<>(k);
+	}
+
+	static synchronized List<String> kitLines() {
+		List<String> out = new ArrayList<>();
+		for (Map.Entry<String, List<String>> e : KITS.entrySet()) {
+			out.add(e.getKey() + "\t" + e.getValue().size() + " items");
+		}
+		return out;
+	}
+
+	private static void saveKits() {
+		JsonObject root = new JsonObject();
+		for (Map.Entry<String, List<String>> e : KITS.entrySet()) {
+			com.google.gson.JsonArray arr = new com.google.gson.JsonArray();
+			for (String item : e.getValue()) {
+				arr.add(item);
+			}
+			root.add(e.getKey(), arr);
+		}
+		write("kits.json", root);
 	}
 
 	// ───────────────────────── action log ─────────────────────────

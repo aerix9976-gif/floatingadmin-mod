@@ -1,26 +1,54 @@
 package dev.floatingadmin.client;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /** UI state that survives page changes (the screen is rebuilt on every page switch). */
 final class Session {
-	enum Page { SELF, PLAYERS, ITEMS, WORLD, ANNOUNCE, FUN, TELEPORT, EFFECTS, RULES, BANS, STATS, LOG }
+	enum Page { DASH, SELF, PLAYERS, ITEMS, FORGE, INVENTORY, KITS, WORLD, ANNOUNCE, FUN, TELEPORT, EFFECTS, RULES, BANS, LOG }
 
-	static Page page = Page.SELF;
-	static String status = "Press K anytime to open. Replies from the server show in chat.";
+	/** A choice waiting for a recipient. kind: give (a = item id, b = "amount ench"), inv, kit (a = kit name). */
+	record Pending(String kind, String a, String b) {}
+
+	static Page page = Page.DASH;
+	static String status = "Drag the title bar to move the panel. Esc hides it, K brings it back.";
+	static Pending pending = null;
+
+	// window position (offset from the centre) - remembered between openings
+	static int offX = 0;
+	static int offY = 0;
 
 	// players
 	static String selectedPlayer = null;
 	static int playerPage = 0;
 	static String playerSearch = "";
 
-	// items
+	// items  (targets: 0 ask, 1 me, 2 selected player)
 	static String search = "";
 	static int itemPage = 0;
 	static int itemCat = 0;
 	static int amount = 1;
-	static boolean giveToSelected = false;
+	static int itemTarget = 1;
+	static int itemEnch = 0; // 0 off, 1 best, 2 overpowered
+
+	// forge
+	static int forgeTier = 0;
+	static int forgeTarget = 0;
+	static int forgeMode = 1;
+
+	// inventory viewer
+	static String invName = null;
+	static String invMode = "inv";
+	static String invOp = "copy";
+	static Map<Integer, String[]> invSlots = new HashMap<>();
+
+	// kits
+	static String kitName = "";
+	static int kitTarget = 0;
+	static int kitPage = 0;
+	static List<String> kits = new ArrayList<>();
 
 	// announce
 	static String announceText = "";
@@ -37,7 +65,6 @@ final class Session {
 	static String fxId = "speed";
 	static int fxLevel = 2;
 	static int fxDur = 2;
-	static int fxPage = 0;
 	static boolean fxToSelected = false;
 
 	// bans / log (shared list paging)
@@ -47,6 +74,7 @@ final class Session {
 	// data pushed by the server
 	static String[] stats = null;
 	static long statsAt = 0;
+	static long logAt = 0;
 	static List<String> log = new ArrayList<>();
 	static List<String> bans = new ArrayList<>();
 	static List<String> mutes = new ArrayList<>();
@@ -65,5 +93,9 @@ final class Session {
 			}
 		}
 		return out;
+	}
+
+	static String targetLabel(int t) {
+		return t == 0 ? "Ask" : t == 1 ? "Me" : "Selected";
 	}
 }

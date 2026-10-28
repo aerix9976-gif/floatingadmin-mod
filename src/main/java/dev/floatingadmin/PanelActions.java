@@ -5,7 +5,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -16,7 +18,15 @@ import com.google.gson.JsonParser;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.tree.CommandNode;
 
+import com.mojang.serialization.JsonOps;
+
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.RegistryOps;
+import net.minecraft.world.Container;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -66,6 +76,16 @@ final class PanelActions {
 			case "req_mutes" -> { send(player, "mutes", String.join("\n", Store.muteLines())); return; }
 			case "req_bans" -> { send(player, "bans", String.join("\n", banLines())); return; }
 			case "req_warps" -> { send(player, "warps", String.join("\n", Store.warpLines())); return; }
+			case "req_kits" -> { send(player, "kits", String.join("\n", Store.kitLines())); return; }
+			case "req_inv" -> {
+				ServerPlayer who = NAME.matcher(target).matches() ? find(server, target) : null;
+				if (who == null) {
+					status(player, target + " is not online.");
+				} else {
+					send(player, "inv", invBody(who, arg.equals("ender") ? "ender" : "inv"));
+				}
+				return;
+			}
 			default -> { }
 		}
 
@@ -149,6 +169,16 @@ final class PanelActions {
 				send(player, "warps", String.join("\n", Store.warpLines()));
 				return true;
 			}
+			case "inv_op": return invOp(server, player, target, arg);
+			case "kit_save": return kitSave(server, player, arg);
+			case "kit_give": return kitGive(server, player, target, arg);
+			case "kit_del": {
+				boolean removed = WARP.matcher(arg).matches() && Store.deleteKit(arg);
+				logAction(player, "kit delete", "", arg);
+				status(player, removed ? "Deleted kit '" + arg + "'." : "No kit called '" + arg + "'.");
+				send(player, "kits", String.join("\n", Store.kitLines()));
+				return true;
+			}
 			case "tp_xyz": {
 				String[] c = arg.trim().split(" ");
 				if (c.length != 3 || !COORD.matcher(c[0]).matches() || !COORD.matcher(c[1]).matches() || !COORD.matcher(c[2]).matches()) {
@@ -221,6 +251,7 @@ final class PanelActions {
 			case "effect": return effect(t, arg);
 			case "effect_clear_one": return WORD.matcher(arg).matches() ? List.of("effect clear " + t + " " + arg) : null;
 			case "give": return give(t, arg);
+			case "forge": return forge(t, arg);
 			case "enchant": return enchant(t, arg);
 			// ---- named-player only ----
 			case "tp_to": return named ? List.of("tp @s " + t) : null;
@@ -312,6 +343,236 @@ final class PanelActions {
 		}
 		int level = a.length > 1 ? clamp(a[1], 1, 255, 1) : 1;
 		return List.of("enchant " + t + " " + a[0] + " " + level);
+	}
+
+
+	// ───────────────────────── forge: best enchantments ─────────────────────────
+
+	/** Gives an item with the best enchantments for its type. mode 1 = vanilla max, 2 = overpowered (double levels). */
+	private static List<String> forge(String t, String arg) {
+		String[] a = arg.trim().split(" ");
+		if (a.length < 1 || !ID.matcher(a[0]).matches()) {
+			return null;
+		}
+		int mode = a.length > 1 ? clamp(a[1], 1, 2, 1) : 1;
+		int amount = a.length > 2 ? clamp(a[2], 1, 64, 1) : 1;
+		String path = a[0].contains(":") ? a[0].substring(a[0].indexOf(':') + 1) : a[0];
+		StringBuilder sb = new StringBuilder();
+		for (Map.Entry<String, Integer> e : enchantSet(path).entrySet()) {
+			int level = e.getValue();
+			if (mode == 2 && level > 1) {
+				level = Math.min(255, level * 2);
+			}
+			if (sb.length() > 0) {
+				sb.append(',');
+			}
+			sb.append("\"minecraft:").append(e.getKey()).append("\":").append(level);
+		}
+		return List.of("give " + t + " " + a[0] + "[enchantments={" + sb + "}] " + amount);
+	}
+
+	private static Map<String, Integer> enchantSet(String p) {
+		Map<String, Integer> m = new LinkedHashMap<>();
+		if (p.endsWith("_sword")) {
+			m.put("sharpness", 5); m.put("looting", 3); m.put("fire_aspect", 2); m.put("knockback", 2); m.put("sweeping_edge", 3);
+		} else if (p.endsWith("_axe")) {
+			m.put("sharpness", 5); m.put("efficiency", 5); m.put("fortune", 3);
+		} else if (p.endsWith("_pickaxe") || p.endsWith("_shovel") || p.endsWith("_hoe")) {
+			m.put("efficiency", 5); m.put("fortune", 3);
+		} else if (p.equals("bow")) {
+			m.put("power", 5); m.put("punch", 2); m.put("flame", 1); m.put("infinity", 1);
+		} else if (p.equals("crossbow")) {
+			m.put("quick_charge", 3); m.put("piercing", 4);
+		} else if (p.equals("trident")) {
+			m.put("impaling", 5); m.put("loyalty", 3); m.put("channeling", 1);
+		} else if (p.equals("mace")) {
+			m.put("density", 5); m.put("wind_burst", 3); m.put("fire_aspect", 2);
+		} else if (p.endsWith("_helmet")) {
+			m.put("protection", 4); m.put("respiration", 3); m.put("aqua_affinity", 1); m.put("thorns", 3);
+		} else if (p.endsWith("_chestplate")) {
+			m.put("protection", 4); m.put("thorns", 3);
+		} else if (p.endsWith("_leggings")) {
+			m.put("protection", 4); m.put("swift_sneak", 3); m.put("thorns", 3);
+		} else if (p.endsWith("_boots")) {
+			m.put("protection", 4); m.put("feather_falling", 4); m.put("depth_strider", 3); m.put("thorns", 3);
+		} else if (p.equals("fishing_rod")) {
+			m.put("luck_of_the_sea", 3); m.put("lure", 3);
+		} else if (p.equals("shears") || p.equals("flint_and_steel")) {
+			m.put("efficiency", 5);
+		}
+		m.put("unbreaking", 3);
+		m.put("mending", 1);
+		return m;
+	}
+
+	// ───────────────────────── inventory viewer ─────────────────────────
+
+	/** First line "name|mode", then one "slot|count|itemId" line per filled slot. Slots 100-104 = head, chest, legs, feet, offhand. */
+	private static String invBody(ServerPlayer who, String mode) {
+		StringBuilder sb = new StringBuilder(name(who)).append('|').append(mode);
+		if (mode.equals("ender")) {
+			Container c = who.getEnderChestInventory();
+			for (int i = 0; i < c.getContainerSize(); i++) {
+				appendSlot(sb, i, c.getItem(i));
+			}
+		} else {
+			Inventory inv = who.getInventory();
+			for (int i = 0; i < 36; i++) {
+				appendSlot(sb, i, inv.getItem(i));
+			}
+			appendSlot(sb, 100, who.getItemBySlot(EquipmentSlot.HEAD));
+			appendSlot(sb, 101, who.getItemBySlot(EquipmentSlot.CHEST));
+			appendSlot(sb, 102, who.getItemBySlot(EquipmentSlot.LEGS));
+			appendSlot(sb, 103, who.getItemBySlot(EquipmentSlot.FEET));
+			appendSlot(sb, 104, who.getItemBySlot(EquipmentSlot.OFFHAND));
+		}
+		return sb.toString();
+	}
+
+	private static void appendSlot(StringBuilder sb, int slot, ItemStack stack) {
+		if (stack == null || stack.isEmpty()) {
+			return;
+		}
+		sb.append('\n').append(slot).append('|').append(stack.getCount()).append('|').append(BuiltInRegistries.ITEM.getKey(stack.getItem()));
+	}
+
+	/** arg = "mode slot op" with op copy (give me a copy), take (move to me) or delete. */
+	private static boolean invOp(MinecraftServer server, ServerPlayer admin, String target, String arg) {
+		ServerPlayer who = NAME.matcher(target).matches() ? find(server, target) : null;
+		String[] a = arg.trim().split(" ");
+		if (who == null || a.length != 3 || !(a[0].equals("inv") || a[0].equals("ender")) || !(a[2].equals("copy") || a[2].equals("take") || a[2].equals("delete"))) {
+			status(admin, "Can't do that: player offline or bad request.");
+			return true;
+		}
+		int slot = clamp(a[1], 0, 200, -1);
+		ItemStack stack = ItemStack.EMPTY;
+		Container ender = a[0].equals("ender") ? who.getEnderChestInventory() : null;
+		if (ender != null) {
+			if (slot >= 0 && slot < ender.getContainerSize()) {
+				stack = ender.getItem(slot);
+			}
+		} else if (slot >= 0 && slot < 36) {
+			stack = who.getInventory().getItem(slot);
+		} else if (slot >= 100 && slot <= 104) {
+			stack = who.getItemBySlot(equipmentFor(slot));
+		}
+		if (stack == null || stack.isEmpty()) {
+			status(admin, "That slot is empty.");
+			send(admin, "inv", invBody(who, a[0]));
+			return true;
+		}
+		String what = BuiltInRegistries.ITEM.getKey(stack.getItem()) + " x" + stack.getCount();
+		if (a[2].equals("copy") || a[2].equals("take")) {
+			if (!admin.getInventory().add(stack.copy())) {
+				status(admin, "Your inventory is full.");
+				return true;
+			}
+		}
+		if (a[2].equals("take") || a[2].equals("delete")) {
+			if (ender != null) {
+				ender.setItem(slot, ItemStack.EMPTY);
+			} else if (slot < 36) {
+				who.getInventory().setItem(slot, ItemStack.EMPTY);
+			} else {
+				who.setItemSlot(equipmentFor(slot), ItemStack.EMPTY);
+			}
+		}
+		logAction(admin, "inventory " + a[2], name(who), what);
+		status(admin, (a[2].equals("copy") ? "Copied " : a[2].equals("take") ? "Took " : "Deleted ") + what);
+		send(admin, "inv", invBody(who, a[0]));
+		return true;
+	}
+
+	private static EquipmentSlot equipmentFor(int slot) {
+		return switch (slot) {
+			case 100 -> EquipmentSlot.HEAD;
+			case 101 -> EquipmentSlot.CHEST;
+			case 102 -> EquipmentSlot.LEGS;
+			case 103 -> EquipmentSlot.FEET;
+			default -> EquipmentSlot.OFFHAND;
+		};
+	}
+
+	// ───────────────────────── kits ─────────────────────────
+
+	private static RegistryOps<JsonElement> ops(MinecraftServer server) {
+		return RegistryOps.create(JsonOps.INSTANCE, server.registryAccess());
+	}
+
+	private static boolean kitSave(MinecraftServer server, ServerPlayer admin, String name) {
+		if (!WARP.matcher(name).matches()) {
+			status(admin, "Kit names: letters, numbers, - and _ (max 20).");
+			return true;
+		}
+		List<ItemStack> stacks = new ArrayList<>();
+		Inventory inv = admin.getInventory();
+		for (int i = 0; i < 36; i++) {
+			stacks.add(inv.getItem(i));
+		}
+		stacks.add(admin.getItemBySlot(EquipmentSlot.HEAD));
+		stacks.add(admin.getItemBySlot(EquipmentSlot.CHEST));
+		stacks.add(admin.getItemBySlot(EquipmentSlot.LEGS));
+		stacks.add(admin.getItemBySlot(EquipmentSlot.FEET));
+		stacks.add(admin.getItemBySlot(EquipmentSlot.OFFHAND));
+		List<String> encoded = new ArrayList<>();
+		for (ItemStack st : stacks) {
+			if (st == null || st.isEmpty()) {
+				continue;
+			}
+			try {
+				encoded.add(ItemStack.CODEC.encodeStart(ops(server), st).getOrThrow(IllegalStateException::new).toString());
+			} catch (RuntimeException e) {
+				FloatingAdmin.LOGGER.warn("Could not save an item into kit {}: {}", name, e.getMessage());
+			}
+		}
+		if (encoded.isEmpty()) {
+			status(admin, "Your inventory is empty - nothing to save.");
+			return true;
+		}
+		Store.setKit(name, encoded);
+		logAction(admin, "kit save", "", name + " (" + encoded.size() + " items)");
+		status(admin, "Saved kit '" + name + "' with " + encoded.size() + " items.");
+		send(admin, "kits", String.join("\n", Store.kitLines()));
+		return true;
+	}
+
+	private static boolean kitGive(MinecraftServer server, ServerPlayer admin, String target, String name) {
+		List<String> items = WARP.matcher(name).matches() ? Store.kit(name) : null;
+		if (items == null) {
+			status(admin, "No kit called '" + name + "'.");
+			return true;
+		}
+		List<ServerPlayer> targets = new ArrayList<>();
+		if (target.equals("@a")) {
+			targets.addAll(server.getPlayerList().getPlayers());
+		} else if (target.equals("@s") || target.isEmpty()) {
+			targets.add(admin);
+		} else {
+			ServerPlayer p = NAME.matcher(target).matches() ? find(server, target) : null;
+			if (p != null) {
+				targets.add(p);
+			}
+		}
+		if (targets.isEmpty()) {
+			status(admin, target + " is not online.");
+			return true;
+		}
+		int full = 0;
+		for (ServerPlayer p : targets) {
+			for (String json : items) {
+				try {
+					ItemStack st = ItemStack.CODEC.parse(ops(server), JsonParser.parseString(json)).getOrThrow(IllegalStateException::new);
+					if (!p.getInventory().add(st)) {
+						full++;
+					}
+				} catch (RuntimeException e) {
+					FloatingAdmin.LOGGER.warn("Could not load an item from kit {}: {}", name, e.getMessage());
+				}
+			}
+		}
+		logAction(admin, "kit give", target.isEmpty() ? "@s" : target, name);
+		status(admin, "Gave kit '" + name + "'" + (full > 0 ? " (" + full + " items did not fit)" : "."));
+		return true;
 	}
 
 	// ───────────────────────── ban list ─────────────────────────

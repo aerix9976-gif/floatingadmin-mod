@@ -7,9 +7,11 @@ Operator-only admin panel with a fully custom-drawn crimson GUI (not an inventor
 Open it: `/adminpanel` (aliases `/ap`, `/admin`, `/fap`) or press K. Only operators can open it. The server re-checks
 operator status on every click and builds the commands itself - the client never sends raw command text.
 
-Pages (sidebar): Self, Players, Items, World, Announce, Fun, Teleport (coords + saved warps), Effects (picker with level/time
-steppers), Rules (game rule on/off), Bans & Mutes (persistent, lift from the panel), Server Stats (live), Action Log.
+Floating window: drag the title bar to move it, mouse wheel pages through lists, Esc hides it and K brings it back in the same place.
 
-Data is stored in `config/aeros-admin/` (mutes.json, warps.json, actions.log).
+Pages (tabs): Dashboard (live stats + recent actions), Self, Players, Items (optional auto-enchant, 'Ask' opens a player menu), Forge (best-enchantment gear),
+Inventory Viewer (copy/take/delete), Kits, World, Announce, Fun, Teleport & Warps, Effects, Game Rules, Bans & Mutes, Action Log.
+
+Data is stored in `config/aeros-admin/` (mutes.json, warps.json, kits.json, actions.log).
 
 Build (JDK 25): ./gradlew build  -> build/libs/AerosAdminPanel-<version>.jar (not the -sources one)

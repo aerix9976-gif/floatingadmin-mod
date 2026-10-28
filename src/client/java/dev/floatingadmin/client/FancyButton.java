@@ -45,6 +45,7 @@ final class FancyButton extends AbstractButton {
 	private Identifier baseSprite = null;
 	private String tooltip = null;
 	private String info = null;
+	private String badge = null;
 	private boolean leftAligned = false;
 	private boolean highlighted = false;
 	private int textColor = 0;
@@ -93,6 +94,12 @@ final class FancyButton extends AbstractButton {
 		return this;
 	}
 
+	/** Small number in the bottom-right corner (item counts). */
+	FancyButton badge(String text) {
+		this.badge = text;
+		return this;
+	}
+
 	FancyButton left(boolean on) {
 		this.leftAligned = on;
 		return this;
@@ -136,6 +143,10 @@ final class FancyButton extends AbstractButton {
 		Font font = Minecraft.getInstance().font;
 		if (!icon.isEmpty()) {
 			graphics.fakeItem(icon, this.getX() + (this.width - 16) / 2, this.getY() + (this.height - 16) / 2);
+			if (badge != null) {
+				graphics.text(font, Component.literal(badge), this.getX() + this.width - 3 - font.width(badge),
+						this.getY() + this.height - 9, 0xFFFFFFFF, true);
+			}
 		} else if (iconSprite != null) {
 			int size = Math.max(8, Math.min(16, Math.min(this.width, this.height) - 2));
 			graphics.blitSprite(RenderPipelines.GUI_TEXTURED, iconSprite, this.getX() + (this.width - size) / 2,

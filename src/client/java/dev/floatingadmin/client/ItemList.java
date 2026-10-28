@@ -29,6 +29,7 @@ final class ItemList {
 			"chorus_fruit", "rotten_flesh", "spider_eye", "milk_bucket");
 
 	private static List<Entry> cache;
+	private static java.util.Map<String, Entry> byId;
 
 	private ItemList() {}
 
@@ -47,6 +48,17 @@ final class ItemList {
 			cache = list;
 		}
 		return cache;
+	}
+
+	/** Looks an item up by id ("diamond_sword" or "minecraft:diamond_sword"). Null if it doesn't exist. */
+	static Entry byId(String id) {
+		if (byId == null) {
+			byId = new java.util.HashMap<>();
+			for (Entry e : all()) {
+				byId.put(e.id().toString(), e);
+			}
+		}
+		return byId.get(id.contains(":") ? id : "minecraft:" + id);
 	}
 
 	static List<Entry> filter(String query, int cat) {

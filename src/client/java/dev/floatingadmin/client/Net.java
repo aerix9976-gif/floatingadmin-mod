@@ -31,11 +31,27 @@ final class Net {
 		}
 	}
 
+	/** A data request with a target and argument, e.g. a player's inventory. Silent. */
+	static void request(String what, String target, String arg) {
+		if (available()) {
+			ClientPlayNetworking.send(new ActionPayload(what + SEP + target + SEP + arg));
+		}
+	}
+
 	/** Asks the server for whatever the given page displays. */
 	static void requestFor(Session.Page page) {
 		switch (page) {
-			case STATS -> request("req_stats");
+			case DASH -> {
+				request("req_stats");
+				request("req_log");
+			}
 			case LOG -> request("req_log");
+			case INVENTORY -> {
+				if (Session.invName != null) {
+					request("req_inv", Session.invName, Session.invMode);
+				}
+			}
+			case KITS -> request("req_kits");
 			case BANS -> {
 				request("req_mutes");
 				request("req_bans");

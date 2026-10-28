@@ -45,9 +45,31 @@ public final class FloatingAdminClient implements ClientModInitializer {
 				case "bans" -> Session.bans = Session.lines(body);
 				case "mutes" -> Session.mutes = Session.lines(body);
 				case "warps" -> Session.warps = Session.lines(body);
+				case "kits" -> Session.kits = Session.lines(body);
+				case "inv" -> {
+					java.util.List<String> lines = Session.lines(body);
+					java.util.Map<Integer, String[]> slots = new java.util.HashMap<>();
+					for (int i = 1; i < lines.size(); i++) {
+						String[] f = lines.get(i).split("\\|", 3);
+						if (f.length == 3) {
+							try {
+								slots.put(Integer.parseInt(f[0]), new String[] {f[1], f[2]});
+							} catch (NumberFormatException ignored) {
+								// skip a malformed line
+							}
+						}
+					}
+					if (!lines.isEmpty()) {
+						String[] head = lines.get(0).split("\\|", 2);
+						Session.invName = head[0];
+						Session.invMode = head.length > 1 ? head[1] : "inv";
+					}
+					Session.invSlots = slots;
+				}
 				default -> { }
 			}
-			if (!parts[0].equals("open") && !parts[0].equals("stats") && !parts[0].equals("status")
+			boolean quietLog = parts[0].equals("log") && Session.page == Session.Page.DASH;
+			if (!quietLog && !parts[0].equals("open") && !parts[0].equals("stats") && !parts[0].equals("status")
 					&& Minecraft.getInstance().gui.screen() instanceof AdminScreen screen) {
 				screen.dataArrived();
 			}
